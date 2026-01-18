@@ -1,0 +1,18 @@
+
+
+
+compile 
+    compila qc
+
+apropos 
+    busca comandos
+
+vid_restart 
+    reinicia el modo de video 
+
+
+# tamaño fisico, pero lo ignora
+vid_height
+vid_width
+    
+ 

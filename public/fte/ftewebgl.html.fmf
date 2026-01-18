@@ -1,0 +1,18 @@
+game quake
+name "Quake Demo"
+basegame id1
+basegame qw
+basegame *fte
+
+bind w +forward
+bind s +back
+bind a +moveleft
+bind d +moveright
+bind mouse2 +jump
+bind mouse3 +forward
+bind mwheelup impulse 10
+bind mwheelup impulse 12
+
+package id1/pak0.pak - "quake-file://id1/pak0.pak"
+package id1/pak1.pak - "quake-file://id1/pak1.pak"
+

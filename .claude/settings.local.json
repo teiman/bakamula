@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout:*)",
+      "Bash(npx vite)",
+      "Bash(echo:*)",
+      "Bash(npm install:*)",
+      "Bash(npm --version:*)",
+      "Bash(/c/Program Files/nodejs/npm.cmd install)",
+      "Bash(node -e:*)",
+      "Bash(/c/Program Files/nodejs/npx.cmd electron --version)",
+      "Bash(./node_modules/electron/dist/electron.exe:*)",
+      "Bash(ls:*)",
+      "Bash(node install.js:*)",
+      "Bash(cmd.exe /c \"node_modules\\\\electron\\\\dist\\\\electron.exe --version\")",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" -e \"const {spawn} = require\\(''child_process''\\); const p = spawn\\(''D:/code/bakamula/node_modules/electron/dist/electron.exe'', [''--version''], {stdio:''inherit''}\\); p.on\\(''close'', code => process.exit\\(code\\)\\)\")",
+      "Bash(powershell.exe -Command \"& ''D:\\\\code\\\\bakamula\\\\node_modules\\\\electron\\\\dist\\\\electron.exe'' --version\")",
+      "Bash(/c/Program Files/nodejs/npx.cmd electron .)",
+      "Bash(/c/Program Files/nodejs/npx.cmd which electron)",
+      "Bash(head:*)"
+    ]
+  }
+}
