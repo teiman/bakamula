@@ -7,11 +7,10 @@ const serverStore = useServerStore();
 const configStore = useConfigStore();
 const canvasRef = ref(null);
 const scriptLoaded = ref(false);
-const isInputCaptured = ref(false);
 
 function toggleInputCapture() {
-  isInputCaptured.value = !isInputCaptured.value;
-  if (isInputCaptured.value && canvasRef.value) {
+  serverStore.isInputCaptured = !serverStore.isInputCaptured;
+  if (serverStore.isInputCaptured && canvasRef.value) {
     canvasRef.value.focus();
   } else if (canvasRef.value) {
     canvasRef.value.blur();
@@ -45,7 +44,7 @@ async function startEngine() {
     files: {},
     arguments: [
       '-basedir', configStore.selectedMod || 'id1',
-      '-manifest', '/fte/ftewebgl.html.fmf',
+      '-manifest', './fte/ftewebgl.html.fmf',
       '+map', serverStore.currentMap || 'start',
       '+nosound',
       '+developer', '1',
@@ -54,17 +53,12 @@ async function startEngine() {
     ],
     execute: (cmd) => {
       try {
-        // Prepare the command (ensure newline for Cbuf_AddText)
         const commandWithNewline = cmd.endsWith('\n') ? cmd : cmd + '\n';
-        
-        // FTEQW WASM specific: FTEC.cbufadd is the standard JS entry point for command buffer
         if (window.FTEC && typeof window.FTEC.cbufadd === 'function') {
           window.FTEC.cbufadd(commandWithNewline);
         } else if (window.Module.ccall) {
-          // Try ccall as a fallback (requires exported Cbuf_AddText)
           window.Module.ccall('Cbuf_AddText', 'void', ['string'], [commandWithNewline]);
         } else if (window.Module._Cbuf_AddText) {
-          // Alternative fallback for directly exported C function
           const buffer = new TextEncoder().encode(commandWithNewline + '\0');
           const ptr = window.Module._malloc(buffer.length);
           window.Module.HEAPU8.set(buffer, ptr);
@@ -78,26 +72,86 @@ async function startEngine() {
       }
     },
     setStatus: (text) => {
-      if (text) serverStore.addToConsole(`[FTE-STATUS] ${text}`);
+      if (text) {
+        serverStore.addToConsole(`[FTE-STATUS] ${text}`);
+        // FTE typically reports "Running..." when the main loop starts
+        if (text === 'Running...' || text.includes('Starting...')) {
+           handleEngineReady();
+        }
+      }
     },
     totalDependencies: 0,
     monitorRunDependencies: (left) => {
       console.log('Dependencies left:', left);
+      if (left === 0 && scriptLoaded.value) {
+        // Fallback or secondary trigger
+        setTimeout(handleEngineReady, 500);
+      }
     }
   };
 
   // 2. Load the FTE script AFTER Module is defined
   const script = document.createElement('script');
-  script.src = '/fte/ftewebgl.js';
+  script.src = './fte/ftewebgl.js';
   script.async = true;
   script.onload = () => {
     scriptLoaded.value = true;
     serverStore.addToConsole('[WASM] Script loaded and initialized');
   };
   script.onerror = () => {
-    serverStore.addToConsole('[Error] Failed to load /fte/ftewebgl.js. Ensure it is in public/fte/');
+    serverStore.addToConsole('[Error] Failed to load ./fte/ftewebgl.js. Ensure it is in public/fte/');
   };
   document.body.appendChild(script);
+}
+
+const configApplied = ref(false);
+
+async function handleEngineReady() {
+  if (configApplied.value) return;
+  
+  // Give it a small moment to ensure the command buffer is definitely ready
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  try {
+    // Attempt to read config/low.cfg using the new Electron API
+    // We try a few possible relative paths just in case
+    let content = null;
+    const possiblePaths = ['config/low.cfg', './config/low.cfg', '../config/low.cfg'];
+    
+    for (const path of possiblePaths) {
+      try {
+        content = await window.electronAPI.readFile(path);
+        if (content) {
+          serverStore.addToConsole(`[WASM] Found config at: ${path}`);
+          break;
+        }
+      } catch (e) {
+        // Continue to next path
+      }
+    }
+
+    if (content) {
+      serverStore.addToConsole('[WASM] Applying low.cfg commands...');
+      const lines = content.split('\n');
+      let count = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // Ignore empty lines and comments
+        if (trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('#') && !trimmed.startsWith(';')) {
+          window.Module.execute(trimmed);
+          count++;
+        }
+      }
+      configApplied.value = true;
+      serverStore.addToConsole(`[WASM] ${count} commands from low.cfg applied`);
+    } else {
+      serverStore.addToConsole('[WASM-WARN] config/low.cfg not found or empty');
+      // Set anyway so we don't keep trying and failing
+      configApplied.value = true; 
+    }
+  } catch (err) {
+    serverStore.addToConsole(`[Error] Failed to apply low.cfg: ${err.message}`);
+  }
 }
 
 // Watch for isRunning to start the engine
@@ -108,9 +162,17 @@ watch(() => serverStore.isRunning, (running) => {
 });
 
 function handleGlobalKeydown(e) {
+  // Capture F1 for snapshot
+  if (e.key === 'F1') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    serverStore.takeSnapshot();
+    return;
+  }
+
   // Always allow Escape to release capture if we are captured
-  if (e.key === 'Escape' && isInputCaptured.value) {
-    isInputCaptured.value = false;
+  if (e.key === 'Escape' && serverStore.isInputCaptured) {
+    serverStore.isInputCaptured = false;
     if (canvasRef.value) canvasRef.value.blur();
     return;
   }
@@ -118,7 +180,7 @@ function handleGlobalKeydown(e) {
   // AGGRESSIVE EVENT SHIELD:
   // If we are NOT in capture mode, kill the event during the capture phase
   // so that Emscripten's global listeners (on window/document) don't see it.
-  if (!isInputCaptured.value) {
+  if (!serverStore.isInputCaptured) {
     // List of keys we might want to allow even when closed (though for console it's usually safer to block all)
     // For now, block everything to be sure.
     e.stopImmediatePropagation();
@@ -128,7 +190,7 @@ function handleGlobalKeydown(e) {
 
 // Intercept other keyboard events too
 function blockEvent(e) {
-  if (!isInputCaptured.value) {
+  if (!serverStore.isInputCaptured) {
     e.stopImmediatePropagation();
   }
 }
@@ -137,8 +199,33 @@ let originalLog = console.log;
 let originalWarn = console.warn;
 let originalError = console.error;
 
+const wrapperRef = ref(null);
+
+// Resize handler to update canvas internal resolution
+const resizeObserver = new ResizeObserver((entries) => {
+  if (!wrapperRef.value || !canvasRef.value) return;
+  
+  // Measure the wrapper (the true layout space) instead of the canvas
+  const rect = wrapperRef.value.getBoundingClientRect();
+  const width = Math.floor(rect.width);
+  const height = Math.floor(rect.height);
+  
+  if (width === 0 || height === 0) return;
+
+  // Update canvas internal dimensions only if they actually changed
+  if (canvasRef.value.width !== width || canvasRef.value.height !== height) {
+    canvasRef.value.width = width;
+    canvasRef.value.height = height;
+    
+    serverStore.addToConsole(`[WASM] Resolution synced: ${width}x${height}`);
+    
+    // Notify FTEQW
+    window.dispatchEvent(new Event('resize'));
+  }
+});
+
 onMounted(() => {
-  // Hijack console to capture engine logs directly
+  // ... hijacks ...
   console.log = (...args) => {
     originalLog(...args);
     const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
@@ -157,18 +244,22 @@ onMounted(() => {
     if (msg.trim()) serverStore.addToConsole(`[WASM-ERR] ${msg}`);
   };
 
-  // Use capture: true to intercept the event before it reaches Emscripten's global listeners
   window.addEventListener('keydown', handleGlobalKeydown, { capture: true });
   window.addEventListener('keyup', blockEvent, { capture: true });
   window.addEventListener('keypress', blockEvent, { capture: true });
-
+  
   if (serverStore.isRunning && serverStore.isWasmMode) {
     startEngine();
+  }
+
+  // Start observing WRAPPER resize
+  if (wrapperRef.value) {
+    resizeObserver.observe(wrapperRef.value);
   }
 });
 
 onUnmounted(() => {
-  // Restore original console
+  // ... cleanup ...
   console.log = originalLog;
   console.warn = originalWarn;
   console.error = originalError;
@@ -177,27 +268,27 @@ onUnmounted(() => {
   window.removeEventListener('keyup', blockEvent, { capture: true });
   window.removeEventListener('keypress', blockEvent, { capture: true });
   
-  if (window.Module) {
-    // Small cleanup
-  }
+  resizeObserver.disconnect();
 });
+
 </script>
 
 <template>
   <div class="quake-container">
     <div 
+      ref="wrapperRef"
       class="canvas-wrapper" 
-      :class="{ 'input-locked': !isInputCaptured }"
-      @click="!isInputCaptured && toggleInputCapture()"
+      :class="{ 'input-locked': !serverStore.isInputCaptured }"
+      @click="!serverStore.isInputCaptured && toggleInputCapture()"
     >
       <canvas 
         ref="canvasRef" 
         class="quake-canvas" 
-        :tabindex="isInputCaptured ? '0' : '-1'"
+        :tabindex="serverStore.isInputCaptured ? '0' : '-1'"
         oncontextmenu="event.preventDefault()"
       ></canvas>
       
-      <div v-if="!isInputCaptured" class="canvas-overlay">
+      <div v-if="!serverStore.isInputCaptured" class="canvas-overlay">
         <div class="overlay-content">
           <span>Click to Capture Input</span>
         </div>
@@ -221,6 +312,8 @@ onUnmounted(() => {
   flex: 1;
   position: relative;
   cursor: crosshair;
+  min-height: 0;
+  min-width: 0;
 }
 
 .canvas-wrapper.input-locked {

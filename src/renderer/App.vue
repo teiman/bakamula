@@ -80,6 +80,7 @@ const serverStore = useServerStore()
 .right-panel {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -87,7 +88,7 @@ const serverStore = useServerStore()
 
 .game-view {
   flex: 2;
-  min-height: 300px;
+  min-height: 0;
   background: #000;
   border-radius: 8px;
   overflow: hidden;

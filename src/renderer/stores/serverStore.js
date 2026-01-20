@@ -9,6 +9,7 @@ export const useServerStore = defineStore('server', () => {
 
   const isRunning = ref(false)
   const isWasmMode = ref(true) // Default to WASM as per new plan
+  const isInputCaptured = ref(false)
   const currentMap = ref('')
   const playerCount = ref(0)
   const consoleBuffer = ref([])
@@ -255,6 +256,7 @@ export const useServerStore = defineStore('server', () => {
   return {
     isRunning,
     isWasmMode,
+    isInputCaptured,
     currentMap,
     playerCount,
     consoleBuffer,

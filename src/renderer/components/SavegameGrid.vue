@@ -1,6 +1,13 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { getClassnameColor } from '../utils/savegameParser'
+import { useServerStore } from '../stores/serverStore'
+
+const vFocus = {
+  mounted: (el) => el.focus()
+}
+
+const serverStore = useServerStore()
 
 const props = defineProps({
   entities: {
@@ -10,20 +17,58 @@ const props = defineProps({
 })
 
 const selectedEntityIndex = ref(null)
-const entityCount = computed(() => props.entities.length)
+const editingField = ref(null)
+const editValue = ref('')
+
+// Local copy of entities to allow immediate UI updates without waiting for a new snapshot
+const localEntities = ref([])
+
+watch(() => props.entities, (newEntities) => {
+  // Deep copy entities to local state
+  localEntities.value = JSON.parse(JSON.stringify(newEntities))
+  selectedEntityIndex.value = null
+  editingField.value = null
+}, { immediate: true })
+
+const entityCount = computed(() => localEntities.value.length)
 
 const selectedEntity = computed(() => {
   if (selectedEntityIndex.value === null) return null
-  return props.entities.find(e => e.entityIndex === selectedEntityIndex.value)
-})
-
-// Reset selection if entities change
-watch(() => props.entities, () => {
-  selectedEntityIndex.value = null
+  return localEntities.value.find(e => e.entityIndex === selectedEntityIndex.value)
 })
 
 function selectEntity(index) {
+  if (editingField.value) stopEditing()
   selectedEntityIndex.value = index
+}
+
+function startEditing(key, value) {
+  editingField.value = key
+  editValue.value = String(value)
+}
+
+function stopEditing() {
+  editingField.value = null
+  editValue.value = ''
+}
+
+async function updateProperty(entityIndex, key, value) {
+  if (editingField.value !== key) return
+
+  const cmd = `poke_ssqc ${entityIndex}.${key}=${value}`
+  
+  // 1. Optimistic UI update
+  const ent = localEntities.value.find(e => e.entityIndex === entityIndex)
+  if (ent) {
+    ent.properties[key] = value
+  }
+
+  // 2. Send to engine
+  serverStore.executeCommand(cmd)
+  serverStore.addToConsole(`> ${cmd}`)
+  
+  // 3. Cleanup
+  stopEditing()
 }
 
 const formatValue = (value) => {
@@ -40,7 +85,7 @@ const formatValue = (value) => {
       </div>
       <div class="grid-container">
         <div
-          v-for="entity in entities"
+          v-for="entity in localEntities"
           :key="entity.entityIndex"
           class="entity-cell"
           :class="{ selected: selectedEntityIndex === entity.entityIndex }"
@@ -62,7 +107,21 @@ const formatValue = (value) => {
       <div class="details-content">
         <div v-for="(value, key) in selectedEntity.properties" :key="key" class="property-row">
           <span class="prop-key">{{ key }}:</span>
-          <span class="prop-val">{{ formatValue(value) }}</span>
+          <div class="prop-val-container">
+            <template v-if="editingField === key">
+              <input
+                v-model="editValue"
+                class="edit-input"
+                @blur="updateProperty(selectedEntity.entityIndex, key, editValue)"
+                @keydown.enter="$event.target.blur()"
+                @keydown.esc="stopEditing"
+                v-focus
+              />
+            </template>
+            <template v-else>
+              <span class="prop-val" @click="startEditing(key, value)">{{ formatValue(value) }}</span>
+            </template>
+          </div>
         </div>
       </div>
     </div>
@@ -201,5 +260,29 @@ const formatValue = (value) => {
 .prop-val {
   color: #fff;
   word-break: break-all;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 2px;
+  transition: background 0.1s;
+}
+
+.prop-val:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.prop-val-container {
+  flex: 1;
+  display: flex;
+}
+
+.edit-input {
+  width: 100%;
+  background: #000;
+  border: 1px solid var(--accent);
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 0 4px;
+  outline: none;
 }
 </style>

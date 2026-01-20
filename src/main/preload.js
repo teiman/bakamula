@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onServerOutput: (callback) => {
     ipcRenderer.on('server:output', (_, line) => callback(line));
   },
+  readFile: (path) => ipcRenderer.invoke('fs:readFile', path),
   removeServerOutputListener: () => {
     ipcRenderer.removeAllListeners('server:output');
   }

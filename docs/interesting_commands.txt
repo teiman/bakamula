@@ -1,6 +1,4 @@
 
-
-
 compile 
     compila qc
 
@@ -14,5 +12,6 @@ vid_restart
 # tamaño fisico, pero lo ignora
 vid_height
 vid_width
-    
- 
+
+poke_ssqc NUMBER.FIELD=VALUE
+poke_ssqc 1.gravitydir_z=1

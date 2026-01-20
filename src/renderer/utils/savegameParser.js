@@ -8,24 +8,21 @@ export function parseSavegame(content) {
     const lines = content.split(/\r?\n/);
 
     let currentEntity = null;
-    let entityIndex = 0;
     let inEntity = false;
 
+    // First pass: collect all raw entity blocks
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
 
-        // Start of entity block
         if (line.startsWith('{')) {
             inEntity = true;
             currentEntity = {
                 classname: '',
-                properties: {},
-                entityIndex: entityIndex++
+                properties: {}
             };
             continue;
         }
 
-        // End of entity block
         if (line === '}') {
             if (currentEntity && inEntity) {
                 entities.push(currentEntity);
@@ -35,22 +32,36 @@ export function parseSavegame(content) {
             continue;
         }
 
-        // Parse property lines (format: "key" "value")
         if (inEntity && line.startsWith('"')) {
             const match = line.match(/"([^"]+)"\s+"([^"]*)"/);
             if (match) {
                 const [, key, value] = match;
-
                 if (key === 'classname') {
                     currentEntity.classname = value;
                 }
-
                 currentEntity.properties[key] = value;
             }
         }
     }
 
-    return entities;
+    // Second pass: Find worldspawn and align indices
+    // Quake assumes worldspawn is entity 0.
+    const worldspawnIndex = entities.findIndex(e => e.classname === 'worldspawn');
+
+    if (worldspawnIndex !== -1) {
+        // Remove anything before worldspawn to align with engine memory
+        const alignedEntities = entities.slice(worldspawnIndex);
+        return alignedEntities.map((e, index) => ({
+            ...e,
+            entityIndex: index
+        }));
+    }
+
+    // Fallback: just return with indices as is
+    return entities.map((e, index) => ({
+        ...e,
+        entityIndex: index
+    }));
 }
 
 /**

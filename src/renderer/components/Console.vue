@@ -212,11 +212,11 @@ function formatLine(text) {
       <input
         type="text"
         v-model="command"
-        placeholder="Enter command..."
-        :disabled="!serverStore.isRunning"
+        :placeholder="serverStore.isInputCaptured ? 'Release input (ESC) to type...' : 'Enter command...'"
+        :disabled="!serverStore.isRunning || serverStore.isInputCaptured"
         @keydown="handleKeydown"
       />
-      <button type="submit" :disabled="!serverStore.isRunning || !command.trim()">
+      <button type="submit" :disabled="!serverStore.isRunning || serverStore.isInputCaptured || !command.trim()">
         Send
       </button>
     </form>

@@ -1,7 +1,6 @@
 game quake
 name "Quake Demo"
 basegame id1
-basegame qw
 basegame *fte
 
 bind w +forward

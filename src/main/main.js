@@ -99,3 +99,30 @@ ipcMain.handle('fs:listSubfolders', (_, dirPath) => {
     return [];
   }
 });
+ipcMain.handle('fs:readFile', (_, filePath) => {
+  try {
+    const { readFileSync, existsSync } = require('node:fs');
+
+    // 1. Try absolute or direct relative path
+    if (existsSync(filePath)) {
+      return readFileSync(filePath, 'utf8');
+    }
+
+    // 2. Try relative to resources path (Production)
+    const resourcePath = path.join(process.resourcesPath, filePath);
+    if (existsSync(resourcePath)) {
+      return readFileSync(resourcePath, 'utf8');
+    }
+
+    // 3. Try relative to app root (Development)
+    const rootPath = path.join(app.getAppPath(), filePath);
+    if (existsSync(rootPath)) {
+      return readFileSync(rootPath, 'utf8');
+    }
+
+    throw new Error(`File not found: ${filePath}`);
+  } catch (err) {
+    console.error(`Error reading file ${filePath}:`, err);
+    throw err;
+  }
+});
